@@ -1,0 +1,209 @@
+---
+title: "Organizational Behavior: Geographic Distribution of Agricultural Units in Peru"
+author: "Elías Aburto Camacllanqui"
+date: last-modified
+format: 
+  html:
+    theme: cerulean
+    toc: true
+#   code-fold: true
+#   code-tools: true
+---
+
+# Introduction
+
+<!-- Adjust size using width and height attributes -->
+<img src="images/units.jpg" alt="Agricultural Unit" width="350" height="500" style="float:right; margin: 0 0 10px 10px;">
+
+**Objective:** To visualize the geographic distribution of the agricultural units that participated in the 2019 National Agricultural Survey (ENA 2019) according to production size.
+
+
+# Methodology
+
+**Data:** INEI
+
+**Survey:** ENA 2019
+
+**Data preprocessing**
+
+
+```{r, message=FALSE, warning=FALSE}
+
+#install.packages("mapsPERU")
+
+library(plotly)
+library(mapsPERU)
+library(ggplot2)
+library(tidyverse)
+library(ggrepel)
+library(dplyr) #para utilizar mutate
+library(readr)
+library(haven)
+
+library(leaflet)
+library(leaflet.extras)
+library(rworldxtra)
+library(raster)
+library(sf)
+library(tidyverse)
+
+#Extraemos las coordenadas del paquete mapsPERU distrito
+df <- map_DIST
+
+#Cargamos nuestra base de datos
+cap1200 <- haven::read_sav("data/20_Cap1200.sav")
+
+#Visualizamos la base de datos
+df
+cap1200
+
+```
+
+We notice that the columns DEPARTMENTO PROVINCIA DISTRITO are in lower case and with tilde while the database cap1200 is in upper case and without tilde. cap1200 database are in uppercase and without tilde. We have to homogenize them.
+
+
+We convert all variables that have lowercase characters to uppercase.
+
+```{r, message=FALSE, warning=FALSE}
+
+df <- mutate_if(df, is.character, toupper)
+df
+```
+
+
+We remove accents from capital letters.
+```{r, message=FALSE, warning=FALSE}
+
+df$DEPARTAMENTO <- chartr('Á,É,Í,Ó,Ú','A,E,I,O,U', df$DEPARTAMENTO)
+df$PROVINCIA <- chartr('Á,É,Í,Ó,Ú','A,E,I,O,U', df$PROVINCIA)
+df$DISTRITO <- chartr('Á,É,Í,Ó,Ú','A,E,I,O,U', df$DISTRITO)
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+# We display the name of the variables
+names(cap1200)
+
+
+# Rename the variable NOMBREDI of the base cap1200
+cap1200 <- rename(cap1200, DISTRITO = NOMBREDI)
+
+
+#Rename the categories of the size of agricultural units
+
+Cod_tipo <- c(`1`="Pequeña y mediana UA",
+              `2`="Grande UA")
+
+
+cap1200$CODIGO <- as.factor(cap1200$CODIGO)
+
+names(cap1200)
+
+cap1200 <- cap1200 %>% 
+  mutate(CODIGO = recode_factor(CODIGO,!!!Cod_tipo))
+
+
+#We integrate both databases through DISTRITO
+ENA2019 <- left_join(df, cap1200, by = "DISTRITO")
+
+names(ENA2019)
+
+```
+
+
+# Results
+
+**1. We create the map base**
+
+```{r, message=FALSE, warning=FALSE}
+leaflet() %>% addTiles()
+```
+
+
+**2. We add the coordinates of all Agricultural units.**
+
+```{r, message=FALSE, warning=FALSE}
+leaflet() %>% addTiles() %>% 
+  addCircles(data = ENA2019, lat = ~coords_y, lng = ~coords_x)
+```
+
+
+
+**3. We have added colors to identify the size of the agricultural units.**
+
+```{r, message=FALSE, warning=FALSE}
+## to generate colors
+#number of types of producers
+Number_tpp <- ENA2019$CODIGO %>% unique() %>% 
+  length()
+
+#Species name
+tpp_Names <- ENA2019$CODIGO %>% unique()
+
+
+## The colors of the sizes of the agricultural units will be:
+Colores <- c('#e41a1c', '#377eb8', '#4daf4a')
+
+table(ENA2019$CODIGO)
+
+#Linking the color palette to name types
+pal <- colorFactor(Colores, domain = tpp_Names)
+
+
+
+##Map with colors. fillopacity is transparency
+leaflet() %>% 
+  addTiles() %>% 
+  addCircles(data = ENA2019, lat = ~coords_y, lng = ~coords_x, color = ~pal(CODIGO), fillOpacity = 0.5)
+
+
+```
+
+
+
+**4. We add labels to agricultural units.**
+
+```{r, message=FALSE, warning=FALSE}
+#labels
+p <- leaflet() %>% 
+  addTiles() %>% 
+  addCircles(data = ENA2019, lat = ~coords_y, 
+             lng = ~coords_x, color = ~pal(CODIGO),
+             fillOpacity = 0.5, label = ~CODIGO, 
+             group = "Codigo")
+
+p
+```
+
+
+
+**5. We generate a legend.**
+
+```{r, message=FALSE, warning=FALSE}
+## Generar una leyenda
+p <- p %>% addLegend(data = ENA2019, "bottomright", pal = pal, 
+                     values = ~CODIGO, title = "Tipos de productores", 
+                     opacity = 0.8, group = "Leyenda")
+p
+```
+
+
+
+**6. We add layers according to the aspects of interest.**
+
+```{r, message=FALSE, warning=FALSE}
+## Seleccionar capas
+p <- p %>% addLayersControl(overlayGroups = c("Codigo", "Leyenda"), 
+                            options = layersControlOptions(collapsed = F))
+p
+
+```
+
+
+
+
+# Conclusions
+
+It can be observed that the majority of agricultural units in Peru have small and medium production sizes. In addition, they are mostly located in the central region of Peru.
